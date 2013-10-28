@@ -47,7 +47,7 @@ typedef struct {
     /** A proxy IP mask to match */
     apr_ipsubnet_t *ip;
     /** Flagged if internal, otherwise an external trusted proxy */
-    void  *internal;
+    int  internal;
 } cloudflare_proxymatch_t;
 
 typedef struct {
@@ -178,8 +178,8 @@ static apr_status_t set_cf_default_proxies(apr_pool_t *p, cloudflare_config_t *c
      return rv;
 }
 
-static const char *proxies_set(cmd_parms *cmd, void *internal,
-                               const char *arg)
+static const char *proxies_set(cmd_parms *cmd, void *dummy,
+                               const char *arg, int internal)
 {
     cloudflare_config_t *config = ap_get_module_config(cmd->server->module_config,
                                                        &cloudflare_module);
@@ -233,6 +233,19 @@ static const char *proxies_set(cmd_parms *cmd, void *internal,
     return NULL;
 }
 
+static const char *proxies_set_internal(cmd_parms *cmd, void *dummy,
+                               const char *arg)
+{
+	return proxies_set(cmd, dummy, arg, 1);
+}
+
+static const char *proxies_set_external(cmd_parms *cmd, void *dummy,
+                               const char *arg)
+{
+	return proxies_set(cmd, dummy, arg, 0);
+
+}
+
 static int cloudflare_modify_connection(request_rec *r)
 {
     conn_rec *c = r->connection;
@@ -252,7 +265,7 @@ static int cloudflare_modify_connection(request_rec *r)
     char *parse_remote;
     char *eos;
     unsigned char *addrbyte;
-    void *internal = NULL;
+    int internal = 0;
 
     apr_pool_userdata_get((void*)&conn, "mod_cloudflare-conn", c->pool);
 
@@ -545,7 +558,7 @@ static const command_rec cloudflare_cmds[] =
     AP_INIT_TAKE1("CloudFlareRemoteIPHeader", header_name_set, NULL, RSRC_CONF,
                   "Specifies a request header to trust as the client IP, "
                   "Overrides the default of CF-Connecting-IP"),
-    AP_INIT_ITERATE("CloudFlareRemoteIPTrustedProxy", proxies_set, 0, RSRC_CONF,
+    AP_INIT_ITERATE("CloudFlareRemoteIPTrustedProxy", proxies_set_internal, NULL, RSRC_CONF,
                     "Specifies one or more proxies which are trusted "
                     "to present IP headers. Overrides the defaults."),
     AP_INIT_NO_ARGS("DenyAllButCloudFlare", deny_all_set, NULL, RSRC_CONF,
