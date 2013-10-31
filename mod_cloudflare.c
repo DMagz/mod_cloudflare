@@ -36,6 +36,7 @@
 #define APR_WANT_BYTEFUNC
 #include "apr_want.h"
 #include "apr_network_io.h"
+#include "mod_qos.h"
 
 module AP_MODULE_DECLARE_DATA cloudflare_module;
 
@@ -522,6 +523,20 @@ static int cloudflare_modify_connection(request_rec *r)
     conn->proxied_addr.pool = c->pool;
     c->remote_addr = &conn->proxied_addr;
 #endif
+
+    // if mod_qos is enabled, need to update connection configuration, as the IP address that's used is saved at connection time, before we had the change to change it.
+    module *qos_module = ap_find_linked_module(MOD_QOS_NAME);
+    if (qos_module) {
+		unsigned long mod_qos_ip;
+		qs_conn_base_ctx *mod_qos_config;
+#if AP_MODULE_MAGIC_AT_LEAST(20111130,0)
+		mod_qos_ip = c->client_addr->sa.sin.sin_addr.s_addr;
+#else
+		mod_qos_ip = c->remote_addr->sa.sin.sin_addr.s_addr;
+#endif
+		mod_qos_config = ((qs_conn_base_ctx*)ap_get_module_config(c->conn_config, qos_module));
+		if (mod_qos_config && mod_qos_config->cconf) mod_qos_config->cconf->ip = mod_qos_ip;
+    }
 
     if (remote)
         remote = apr_pstrdup(c->pool, remote);
